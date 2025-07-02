@@ -1,0 +1,109 @@
+[
+  {
+    "type": "title",
+    "title": "Minimalist Presentation Generator",
+    "content": {
+      "subtitle": "Create beautiful presentations with AI"
+    }
+  },
+  {
+    "type": "bullet",
+    "title": "Key Features",
+    "content": {
+      "bullets": [
+        {
+          "text": "**AI-powered content generation** using GPT-4o",
+          "indent": 0
+        },
+        {
+          "text": "**Web search integration** for up-to-date information",
+          "indent": 0
+        },
+        {
+          "text": "**Modern, minimalist design** with beautiful typography",
+          "indent": 0
+        },
+        {
+          "text": "**Multiple slide types** for different content needs",
+          "indent": 0
+        },
+        {
+          "text": "**Responsive layout** that works on all devices",
+          "indent": 0
+        }
+      ]
+    }
+  },
+  {
+    "type": "text",
+    "title": "How It Works",
+    "content": {
+      "text": "The presentation generator uses OpenAI's GPT-4o to create engaging, informative presentations from simple text prompts.\n\nThe process works in three key steps:\n\n1. **Content Planning**: The AI analyzes your request and creates a structured content plan\n\n2. **Research**: For factual topics, the AI performs web searches to gather current information\n\n3. **Slide Generation**: Content is transformed into various slide types with appropriate formatting",
+      "sources": [
+        "Internal documentation",
+        "OpenAI API documentation"
+      ]
+    }
+  },
+  {
+    "type": "comparison",
+    "title": "Traditional vs. AI Presentations",
+    "content": {
+      "leftTitle": "Traditional Approach",
+      "rightTitle": "AI-Powered Approach",
+      "leftItems": [
+        "**Time-consuming** manual research",
+        "Requires design skills",
+        "Static content that can become outdated",
+        "Limited by creator's knowledge"
+      ],
+      "rightItems": [
+        "**Fast generation** in minutes",
+        "Professionally designed templates",
+        "Up-to-date information from web searches",
+        "Access to vast knowledge base"
+      ]
+    }
+  },
+  {
+    "type": "quote",
+    "title": "User Feedback",
+    "content": {
+      "quote": "This tool has completely transformed how I prepare for presentations. What used to take days now takes minutes, and the results are consistently impressive.",
+      "author": "Jane Smith",
+      "source": "Product Beta Tester"
+    }
+  },
+  {
+    "type": "split",
+    "title": "Use Cases",
+    "content": {
+      "leftContent": "## Business\n\n- Sales presentations\n- Executive briefings\n- Training materials\n- Product demonstrations\n- Investor pitches",
+      "rightContent": "## Education\n\n- Lesson planning\n- Student assignments\n- Research presentations\n- Conference talks\n- Workshop materials"
+    }
+  },
+  {
+    "type": "code",
+    "title": "Integration Example",
+    "content": {
+      "code": "// Generate a presentation programmatically\nconst generatePresentation = async (title, description) => {\n  const response = await fetch('/api/generate', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ title, description })\n  });\n  \n  return response.json();\n};",
+      "language": "javascript",
+      "filename": "example.js"
+    }
+  },
+  {
+    "type": "image",
+    "title": "Visualization",
+    "content": {
+      "url": "https://images.unsplash.com/photo-1496171367470-9ed9a91ea931",
+      "caption": "AI-generated presentations combine the best of human creativity and machine efficiency"
+    }
+  },
+  {
+    "type": "title",
+    "title": "Start Creating Now",
+    "content": {
+      "subtitle": "Transform your ideas into beautiful presentations in minutes"
+    }
+  }
+] 
