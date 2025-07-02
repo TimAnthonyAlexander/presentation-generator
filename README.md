@@ -2,6 +2,19 @@
 
 A minimalist presentation generator and viewer that creates beautiful, modern presentations from simple text descriptions.
 
+## Screenshots
+
+### Creation Interface
+![Creation Interface](./1.png)
+
+### Planning View
+![Planning View](./2.png)
+
+### Sample Presentation Slides
+![Title Slide](./3.png)
+![Content Slide - Historical Evolution](./4.png)
+![Content Slide - Market Data](./5.png)
+
 ## Project Structure
 
 This project consists of two main parts:
@@ -62,6 +75,8 @@ You will be prompted to enter:
 - A presentation title
 - A description of the content you want in the presentation
 
+Alternatively, use the web interface by navigating to the application in your browser, where you'll see the creation form as shown in the first screenshot.
+
 #### Command Line Arguments
 
 ```
@@ -69,6 +84,14 @@ php generate.php "Your Presentation Title" "Detailed description of what you wan
 ```
 
 The output filename is optional. If not provided, a filename will be generated based on the title.
+
+### Presentation Creation Process
+
+After submitting your presentation details, you'll see a planning view (as shown in the second screenshot) that displays the generation progress through multiple stages:
+- Planning
+- Research
+- Generate
+- Complete
 
 ### Viewing a Presentation
 
@@ -86,6 +109,8 @@ The output filename is optional. If not provided, a filename will be generated b
      ```
      http://localhost:3000?file=path/to/your/presentation.json
      ```
+
+The screenshots above show examples of the different slide types available in the generated presentations, including title slides, content slides with historical information, and data-rich slides with market statistics.
 
 ## Example
 
@@ -107,4 +132,4 @@ The output filename is optional. If not provided, a filename will be generated b
 You can adjust various parameters in the generator and viewer to customize the experience:
 
 - Modify `php/src/PresentationService.php` to change how content is researched and generated.
-- Edit the React components in the `web/src/presenter` directory to change the appearance of different slide types. 
+- Edit the React components in the `web/src/presenter` directory to change the appearance of different slide types.
