@@ -1,20 +1,16 @@
 <?php
 
-declare(strict_types=1);
-
-namespace timanthonyalexander\taa\service;
-
-use Exception;
-use TimAlexander\Marketanalysis\GPT;
-use timanthonyalexander\taa\model\Presentation\PresentationModel;
-
+/**
+ * Simplified Presentation Service
+ * 
+ * This service generates presentations using OpenAI's API.
+ */
 class PresentationService
 {
     private string $apiKeyPath;
     private float $totalCost = 0.0;
     private int $totalInputTokens = 0;
     private int $totalOutputTokens = 0;
-    private ?PresentationModel $presentationModel = null;
 
     // Retry configuration
     private int $maxRetries = 3;
@@ -27,14 +23,6 @@ class PresentationService
         $this->maxRetries = $maxRetries;
         $this->retryDelay = $retryDelay;
         $this->exponentialBackoff = $exponentialBackoff;
-    }
-
-    /**
-     * Set the presentation model for status updates
-     */
-    public function setPresentationModel(PresentationModel $presentationModel): void
-    {
-        $this->presentationModel = $presentationModel;
     }
 
     /**
@@ -60,37 +48,16 @@ class PresentationService
     }
 
     /**
-     * Update presentation status with detailed information
-     */
-    private function updateStatus(string $status, string $description): void
-    {
-        if ($this->presentationModel === null) {
-            return;
-        }
-
-        $this->presentationModel->status = $status;
-        $this->presentationModel->statusDescription = $description;
-        $this->presentationModel->updatedAt = date('Y-m-d H:i:s');
-        if ($this->presentationModel->createdAt === null) {
-            $this->presentationModel->createdAt = $this->presentationModel->updatedAt;
-        }
-        $this->presentationModel->save();
-    }
-
-    /**
      * Execute a GPT call with retry logic
      */
-    private function executeWithRetry(callable $gptCall, string $operationName, string $statusPrefix = ''): array
+    private function executeWithRetry(callable $gptCall, string $operationName): array
     {
         $lastException = null;
 
         for ($attempt = 1; $attempt <= $this->maxRetries; $attempt++) {
             try {
                 if ($attempt > 1) {
-                    $this->updateStatus(
-                        $statusPrefix . 'retrying',
-                        "{$operationName} - Retry attempt {$attempt}/{$this->maxRetries}"
-                    );
+                    echo "{$operationName} - Retry attempt {$attempt}/{$this->maxRetries}\n";
 
                     // Apply delay with optional exponential backoff
                     $delay = $this->exponentialBackoff
@@ -102,12 +69,9 @@ class PresentationService
 
                 // Execute the GPT call
                 $result = $gptCall();
-
+                
                 if ($attempt > 1) {
-                    $this->updateStatus(
-                        $statusPrefix . 'retry_success',
-                        "{$operationName} - Succeeded on attempt {$attempt}"
-                    );
+                    echo "{$operationName} - Succeeded on attempt {$attempt}\n";
                 }
 
                 return $result;
@@ -115,22 +79,18 @@ class PresentationService
                 $lastException = $e;
 
                 // Log detailed error information
-                error_log("GPT call failed on attempt {$attempt}/{$this->maxRetries} for {$operationName}:");
-                error_log("  Error: " . $e->getMessage());
-                error_log("  File: " . $e->getFile() . " Line: " . $e->getLine());
+                echo "GPT call failed on attempt {$attempt}/{$this->maxRetries} for {$operationName}:\n";
+                echo "  Error: " . $e->getMessage() . "\n";
 
                 // Check if this is a retryable error (network issues, rate limits, etc.)
                 $isRetryable = $this->isRetryableError($e);
 
                 if ($attempt === $this->maxRetries || !$isRetryable) {
                     $errorType = $isRetryable ? "after {$this->maxRetries} attempts" : "(non-retryable error)";
-                    $this->updateStatus(
-                        'failed',
-                        "{$operationName} - Failed {$errorType}: " . $e->getMessage()
-                    );
+                    echo "{$operationName} - Failed {$errorType}: " . $e->getMessage() . "\n";
 
                     if (!$isRetryable) {
-                        error_log("Non-retryable error encountered for {$operationName}, stopping retries");
+                        echo "Non-retryable error encountered for {$operationName}, stopping retries\n";
                     }
                     break;
                 } else {
@@ -138,10 +98,7 @@ class PresentationService
                         ? $this->retryDelay * pow(2, $attempt - 1)
                         : $this->retryDelay;
 
-                    $this->updateStatus(
-                        $statusPrefix . 'retry_needed',
-                        "{$operationName} - Attempt {$attempt} failed: " . $e->getMessage() . ". Retrying in {$nextDelay} seconds..."
-                    );
+                    echo "{$operationName} - Attempt {$attempt} failed: " . $e->getMessage() . ". Retrying in {$nextDelay} seconds...\n";
                 }
             }
         }
@@ -201,140 +158,8 @@ class PresentationService
             }
         }
 
-        // For JSON parsing errors, make them more reliably retryable
-        // Check for both "json" keyword and common JSON error messages
-        $jsonErrorPatterns = [
-            'json',
-            'syntax error',
-            'control character error',
-            'unexpected end of json input',
-            'malformed json',
-            'invalid json',
-            'json decode error',
-            'unexpected character',
-            'unexpected token',
-            'unterminated string',
-            'invalid escape sequence'
-        ];
-
-        $isJsonError = false;
-        foreach ($jsonErrorPatterns as $pattern) {
-            if (strpos($errorMessage, $pattern) !== false) {
-                $isJsonError = true;
-                break;
-            }
-        }
-
-        if ($isJsonError) {
-            // Most JSON parsing errors are retryable as they often indicate
-            // truncated responses, network corruption, or temporary API issues
-            // Only skip retry for clearly structural issues
-            $nonRetryableJsonPatterns = [
-                'schema validation',
-                'required field missing',
-                'invalid structure'
-            ];
-
-            foreach ($nonRetryableJsonPatterns as $pattern) {
-                if (strpos($errorMessage, $pattern) !== false) {
-                    return false;
-                }
-            }
-
-            return true; // Default to retryable for JSON errors
-        }
-
         // Default to retryable for unknown errors
         return true;
-    }
-
-    /**
-     * Save response to file for debugging purposes
-     */
-    private function saveResponseForDebugging(string $response, string $context, string $error = ''): string
-    {
-        $timestamp = date('Y-m-d_H-i-s');
-        $filename = "presentation_debug_{$context}_{$timestamp}.txt";
-        $filepath = __DIR__ . "/../../logs/{$filename}";
-
-        // Ensure logs directory exists
-        $logDir = dirname($filepath);
-        if (!is_dir($logDir)) {
-            mkdir($logDir, 0755, true);
-        }
-
-        $debugInfo = "=== PRESENTATION DEBUG LOG ===\n";
-        $debugInfo .= "Timestamp: " . date('Y-m-d H:i:s') . "\n";
-        $debugInfo .= "Context: {$context}\n";
-        if (!empty($error)) {
-            $debugInfo .= "Error: {$error}\n";
-        }
-        $debugInfo .= "Response Length: " . strlen($response) . "\n";
-        $debugInfo .= "Retry Configuration: " . json_encode($this->getRetryConfiguration()) . "\n";
-        $debugInfo .= "=== RAW RESPONSE ===\n";
-        $debugInfo .= $response;
-        $debugInfo .= "\n=== END RESPONSE ===\n";
-
-        try {
-            file_put_contents($filepath, $debugInfo);
-
-            // Also update presentation model with debug info if available
-            if ($this->presentationModel !== null) {
-                $currentDebugFiles = json_decode($this->presentationModel->debugFiles ?? '[]', true);
-                $currentDebugFiles[] = [
-                    'filename' => $filename,
-                    'filepath' => $filepath,
-                    'context' => $context,
-                    'error' => $error,
-                    'timestamp' => date('Y-m-d H:i:s'),
-                    'size' => strlen($response)
-                ];
-                $this->presentationModel->debugFiles = json_encode($currentDebugFiles);
-                $this->presentationModel->save();
-            }
-
-            return $filepath;
-        } catch (Exception $e) {
-            error_log("Failed to save debug file: " . $e->getMessage());
-            return '';
-        }
-    }
-
-    /**
-     * Get all debug files created during this session
-     */
-    public function getDebugFiles(): array
-    {
-        if ($this->presentationModel === null) {
-            return [];
-        }
-
-        return json_decode($this->presentationModel->debugFiles ?? '[]', true);
-    }
-
-    /**
-     * Clean up old debug files (older than specified days)
-     */
-    public static function cleanupDebugFiles(int $daysOld = 7): int
-    {
-        $logDir = __DIR__ . "/../../logs/";
-        if (!is_dir($logDir)) {
-            return 0;
-        }
-
-        $cleanedCount = 0;
-        $cutoffTime = time() - ($daysOld * 24 * 60 * 60);
-
-        $files = glob($logDir . "presentation_debug_*.txt");
-        foreach ($files as $file) {
-            if (filemtime($file) < $cutoffTime) {
-                if (unlink($file)) {
-                    $cleanedCount++;
-                }
-            }
-        }
-
-        return $cleanedCount;
     }
 
     /**
@@ -348,34 +173,31 @@ class PresentationService
         // Reset usage tracking
         $this->resetUsage();
 
-        $this->updateStatus('processing', 'Starting presentation generation process...');
+        echo "Starting presentation generation process...\n";
 
         // Step 1: Plan the content with retry logic
-        $this->updateStatus('planning', 'Analyzing presentation requirements and planning content structure...');
+        echo "Planning: Analyzing presentation requirements and planning content structure...\n";
         $contentPlan = $this->executeWithRetry(
             fn() => $this->planContentInternal($title, $message),
-            'Content Planning',
-            'planning_'
+            'Content Planning'
         );
 
-        $planSummary = $this->createPlanSummary($contentPlan);
-        $this->updateStatus('planning_complete', "Content planning completed. {$planSummary}");
+        echo "Content planning completed.\n";
 
         // Step 2: Research the content with retry logic
-        $this->updateStatus('researching', 'Beginning content research phase...');
+        echo "Research: Beginning content research phase...\n";
         $researchedContent = $this->researchContentWithRetry($contentPlan);
 
-        $this->updateStatus('research_complete', 'Content research completed. Preparing to generate final presentation...');
+        echo "Content research completed. Preparing to generate final presentation...\n";
 
         // Step 3: Generate the final presentation with retry logic
-        $this->updateStatus('generating', 'Generating final presentation with researched content...');
+        echo "Generating: Creating final presentation with researched content...\n";
         $presentation = $this->executeWithRetry(
             fn() => $this->generatePresentationInternal($title, $message, $researchedContent),
-            'Final Presentation Generation',
-            'generating_'
+            'Final Presentation Generation'
         );
 
-        $this->updateStatus('finalizing', 'Presentation generation completed, finalizing results...');
+        echo "Presentation generation completed, finalizing results...\n";
 
         return [
             'presentation' => $presentation,
@@ -414,7 +236,7 @@ class PresentationService
      */
     private function planContentInternal(string $title, string $message): array
     {
-        $this->updateStatus('planning', 'Using AI to analyze presentation requirements and create detailed content plan...');
+        echo "Planning: Using AI to analyze presentation requirements and create detailed content plan...\n";
 
         $gpt = $this->createGPTInstance('o4-mini');
         $gpt->setResponseFormat('json_object');
@@ -432,28 +254,6 @@ class PresentationService
         if (json_last_error() !== JSON_ERROR_NONE) {
             $jsonError = json_last_error_msg();
             $errorMsg = 'Error parsing content plan from AI response: ' . $jsonError;
-
-            // Save the full response for debugging
-            $debugFile = $this->saveResponseForDebugging($response, 'content_planning', $jsonError);
-
-            // Enhanced logging with more details
-            error_log("=== JSON PARSING ERROR IN planContentInternal() ===");
-            error_log("JSON Error: " . $jsonError);
-            error_log("Original response length: " . strlen($response));
-            error_log("Cleaned response length: " . strlen($cleanResponse));
-            error_log("Debug file saved: " . ($debugFile ?: 'FAILED TO SAVE'));
-            error_log("First 1000 chars of original response: " . substr($response, 0, 1000));
-            error_log("First 1000 chars of cleaned response: " . substr($cleanResponse, 0, 1000));
-            error_log("Last 500 chars of cleaned response: " . substr($cleanResponse, -500));
-            error_log("=== END JSON PARSING ERROR LOG ===");
-
-            // Update status with debug file info
-            $statusMsg = $errorMsg;
-            if ($debugFile) {
-                $statusMsg .= " (Debug file saved: " . basename($debugFile) . ")";
-            }
-            $this->updateStatus('failed', $statusMsg);
-
             throw new \Exception('Invalid JSON response from content planning: ' . $jsonError);
         }
 
@@ -469,7 +269,7 @@ class PresentationService
         $totalItems = count($contentPlan['content_items'] ?? []);
 
         if (!isset($contentPlan['content_items']) || !is_array($contentPlan['content_items'])) {
-            $this->updateStatus('research_complete', 'No content items found in plan, skipping research phase.');
+            echo "No content items found in plan, skipping research phase.\n";
             return $researchedContent;
         }
 
@@ -485,25 +285,23 @@ class PresentationService
             $needsSearch = $item['needs_search'];
 
             if ($needsSearch) {
-                $this->updateStatus('researching', "Researching topic {$currentItem}/{$totalItems}: '{$topic}' using web search...");
+                echo "Researching topic {$currentItem}/{$totalItems}: '{$topic}' using web search...\n";
 
                 // Execute search with retry logic
                 $searchResult = $this->executeWithRetry(
                     fn() => $this->searchContentInternal($topic, $item['search_query'] ?? $topic),
-                    "Search for '{$topic}'",
-                    'research_'
+                    "Search for '{$topic}'"
                 );
 
                 $content = $searchResult['content'];
                 $sources = $searchResult['sources'] ?? [];
             } else {
-                $this->updateStatus('researching', "Generating content {$currentItem}/{$totalItems}: '{$topic}' using AI knowledge...");
+                echo "Generating content {$currentItem}/{$totalItems}: '{$topic}' using AI knowledge...\n";
 
                 // Execute content generation with retry logic
                 $content = $this->executeWithRetry(
                     fn() => ['content' => $this->generateContentInternal($topic, $item['context'] ?? '')],
-                    "Generate content for '{$topic}'",
-                    'research_'
+                    "Generate content for '{$topic}'"
                 )['content'];
 
                 $sources = [];
@@ -518,57 +316,7 @@ class PresentationService
 
             // Update progress
             $progress = round(($currentItem / $totalItems) * 100);
-            $this->updateStatus('researching', "Research progress: {$progress}% complete ({$currentItem}/{$totalItems} topics processed)");
-        }
-
-        return $researchedContent;
-    }
-
-    /**
-     * Step 2: Research the content based on the plan (original method - kept for backwards compatibility)
-     */
-    private function researchContent(array $contentPlan): array
-    {
-        $researchedContent = [];
-        $totalItems = count($contentPlan['content_items'] ?? []);
-
-        if (!isset($contentPlan['content_items']) || !is_array($contentPlan['content_items'])) {
-            $this->updateStatus('research_complete', 'No content items found in plan, skipping research phase.');
-            return $researchedContent;
-        }
-
-        $currentItem = 0;
-        foreach ($contentPlan['content_items'] as $item) {
-            $currentItem++;
-
-            if (!isset($item['topic']) || !isset($item['needs_search'])) {
-                continue;
-            }
-
-            $topic = $item['topic'];
-            $needsSearch = $item['needs_search'];
-
-            if ($needsSearch) {
-                $this->updateStatus('researching', "Researching topic {$currentItem}/{$totalItems}: '{$topic}' using web search...");
-                $searchResult = $this->searchContentInternal($topic, $item['search_query'] ?? $topic);
-                $content = $searchResult['content'];
-                $sources = $searchResult['sources'] ?? [];
-            } else {
-                $this->updateStatus('researching', "Generating content {$currentItem}/{$totalItems}: '{$topic}' using AI knowledge...");
-                $content = $this->generateContentInternal($topic, $item['context'] ?? '');
-                $sources = [];
-            }
-
-            $researchedContent[] = [
-                'topic' => $topic,
-                'content' => $content,
-                'sources' => $sources,
-                'needs_search' => $needsSearch
-            ];
-
-            // Update progress
-            $progress = round(($currentItem / $totalItems) * 100);
-            $this->updateStatus('researching', "Research progress: {$progress}% complete ({$currentItem}/{$totalItems} topics processed)");
+            echo "Research progress: {$progress}% complete ({$currentItem}/{$totalItems} topics processed)\n";
         }
 
         return $researchedContent;
@@ -646,7 +394,7 @@ class PresentationService
      */
     private function generatePresentationInternal(string $title, string $message, array $researchedContent): array
     {
-        $this->updateStatus('generating', 'Creating final presentation structure and slides from researched content...');
+        echo "Creating final presentation structure and slides from researched content...\n";
 
         $gpt = $this->createGPTInstance('o4-mini');
         $gpt->setResponseFormat('json_object');
@@ -654,23 +402,17 @@ class PresentationService
         $prompt = $this->createPresentationPrompt($title, $message, $researchedContent);
         $gpt->addMessage('user', $prompt);
 
-        $this->updateStatus('generating', 'Processing AI request for final presentation generation...');
+        echo "Processing AI request for final presentation generation...\n";
         $response = $gpt->getCompletion();
         $this->trackUsage($gpt);
 
         // Check for empty response first
         if (empty(trim($response))) {
             $errorMsg = 'Empty response from AI service (model: o4-mini)';
-            error_log("=== EMPTY RESPONSE ERROR IN generatePresentationInternal() ===");
-            error_log("Response length: " . strlen($response));
-            error_log("Model: o4-mini");
-            error_log("=== END EMPTY RESPONSE ERROR LOG ===");
-
-            $this->updateStatus('failed', $errorMsg);
             throw new \Exception($errorMsg);
         }
 
-        $this->updateStatus('generating', 'Parsing and validating presentation structure...');
+        echo "Parsing and validating presentation structure...\n";
 
         // Clean and parse the response
         $presentationData = json_decode($response, true);
@@ -678,60 +420,28 @@ class PresentationService
         if (json_last_error() !== JSON_ERROR_NONE) {
             $jsonError = json_last_error_msg();
             $errorMsg = 'Error parsing final presentation from AI response: ' . $jsonError;
-
-            // Always save debug file for JSON parsing errors
-            $debugFile = $this->saveResponseForDebugging($response, 'presentation_generation', $jsonError);
-
-            // Enhanced logging with more details
-            error_log("=== JSON PARSING ERROR IN generatePresentationInternal() ===");
-            error_log("JSON Error: " . $jsonError);
-            error_log("JSON Error Code: " . json_last_error());
-            error_log("Original response length: " . strlen($response));
-            error_log("Debug file saved: " . ($debugFile ?: 'FAILED TO SAVE'));
-
-            // Look for common issues in the cleaned response
-            $issues = [];
-            if (!empty($issues)) {
-                error_log("Detected issues: " . implode(', ', $issues));
-            }
-
-            error_log("=== END JSON PARSING ERROR LOG ===");
-
-            // Update status with debug file info
-            $statusMsg = $errorMsg;
-            if ($debugFile) {
-                $statusMsg .= " (Debug file saved: " . basename($debugFile) . ")";
-            }
-            $this->updateStatus('failed', $statusMsg);
-
             throw new \Exception('Invalid JSON response from presentation generation: ' . $jsonError);
         }
 
         // Validate and clean the presentation structure
-        $this->updateStatus('generating', 'Validating presentation structure and content...');
+        echo "Validating presentation structure and content...\n";
 
         try {
             $this->validatePresentationStructure($presentationData);
         } catch (\Exception $e) {
-            // If validation fails, save debug info but continue
-            $debugFile = $this->saveResponseForDebugging($response, 'validation_failed', $e->getMessage());
-            error_log("Presentation validation failed, debug file: " . ($debugFile ?: 'FAILED TO SAVE'));
-            error_log("Validation error: " . $e->getMessage());
-
-            // Continue with unvalidated data - better than failing completely
-            $this->updateStatus('generating', 'Validation failed but continuing with unvalidated data...');
+            // If validation fails, log but continue
+            echo "Presentation validation warning: " . $e->getMessage() . "\n";
+            echo "Continuing with unvalidated data...\n";
         }
 
         // Clean any remaining formatting issues
         $presentationData = $this->cleanPresentationData($presentationData);
 
         $slideCount = count($presentationData);
-        $this->updateStatus('generation_complete', "Presentation successfully generated with {$slideCount} slides.");
+        echo "Presentation successfully generated with {$slideCount} slides.\n";
 
         return $presentationData;
     }
-
-
 
     /**
      * Create the prompt for content planning
@@ -1028,7 +738,7 @@ PROMPT;
                 try {
                     $codepoint = hexdec($matches[1]);
                     return mb_chr($codepoint, 'UTF-8');
-                } catch (Exception) {
+                } catch (\Exception $e) {
                     // If conversion fails, return the original sequence
                     return $matches[0];
                 }
@@ -1122,7 +832,7 @@ PROMPT;
     /**
      * Track usage from a GPT instance
      */
-    private function trackUsage(GPT $gpt): void
+    private function trackUsage($gpt): void
     {
         $this->totalCost += $gpt->getTotalCost();
         $this->totalInputTokens += $gpt->getTotalInputTokens();
@@ -1166,31 +876,141 @@ PROMPT;
     /**
      * Create a GPT instance with proper parameters based on model type
      */
-    private function createGPTInstance(string $model, int $maxTokens = 4000): GPT
+    private function createGPTInstance(string $model, int $maxTokens = 4000)
     {
-        $modelsWithoutTemperature = [
-            // Reasoning models
-            'o1-mini',
-            'o1-preview',
-            'o1',
-            'o3-mini',
-            'o3-preview',
-            'o3',
-            'o4-mini',
-            'o4-preview',
-            'o4',
-            // Preview/special models that don't support temperature
-            'gpt-4o-mini-search-preview'
+        // Simple GPT client implementation for this standalone project
+        return new GPTClient($this->apiKeyPath, $model, $maxTokens);
+    }
+}
+
+/**
+ * Simple GPT Client for the standalone project
+ */
+class GPTClient {
+    private string $apiKey;
+    private string $model;
+    private int $maxTokens;
+    private array $messages = [];
+    private string $responseFormat = 'text';
+    private float $totalCost = 0.0;
+    private int $totalInputTokens = 0;
+    private int $totalOutputTokens = 0;
+
+    public function __construct(string $apiKeyPath, string $model, int $maxTokens = 4000) {
+        // Load API key from file
+        if (!file_exists($apiKeyPath)) {
+            throw new \Exception("OpenAI API key file not found at {$apiKeyPath}");
+        }
+        $this->apiKey = trim(file_get_contents($apiKeyPath));
+        $this->model = $model;
+        $this->maxTokens = $maxTokens;
+    }
+
+    public function addMessage(string $role, string $content): void {
+        $this->messages[] = [
+            'role' => $role,
+            'content' => $content
+        ];
+    }
+
+    public function setResponseFormat(string $format): void {
+        $this->responseFormat = $format;
+    }
+
+    public function getCompletion(): string {
+        $data = [
+            'model' => $this->model,
+            'messages' => $this->messages,
+            'max_tokens' => $this->maxTokens
         ];
 
-        $supportsTemperature = !in_array($model, $modelsWithoutTemperature);
-
-        if ($supportsTemperature) {
-            // Standard models support temperature
-            return new GPT($this->apiKeyPath, $model, 0.7, $maxTokens);
-        } else {
-            // Models that don't support temperature
-            return new GPT($this->apiKeyPath, $model, 0.0, $maxTokens);
+        if ($this->responseFormat === 'json_object') {
+            $data['response_format'] = ['type' => 'json_object'];
         }
+
+        $ch = curl_init('https://api.openai.com/v1/chat/completions');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $this->apiKey
+        ]);
+
+        $response = curl_exec($ch);
+        $error = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($error) {
+            throw new \Exception("cURL Error: {$error}");
+        }
+
+        if ($httpCode !== 200) {
+            throw new \Exception("API Error: HTTP {$httpCode} - {$response}");
+        }
+
+        $decoded = json_decode($response, true);
+        
+        if (!isset($decoded['choices'][0]['message']['content'])) {
+            throw new \Exception("Unexpected API response format");
+        }
+
+        // Track token usage
+        if (isset($decoded['usage'])) {
+            $this->totalInputTokens += $decoded['usage']['prompt_tokens'] ?? 0;
+            $this->totalOutputTokens += $decoded['usage']['completion_tokens'] ?? 0;
+            
+            // Calculate cost based on model and tokens
+            $this->calculateCost($decoded['usage']);
+        }
+
+        return $decoded['choices'][0]['message']['content'];
+    }
+
+    public function getTotalCost(): float {
+        return $this->totalCost;
+    }
+
+    public function getTotalInputTokens(): int {
+        return $this->totalInputTokens;
+    }
+
+    public function getTotalOutputTokens(): int {
+        return $this->totalOutputTokens;
+    }
+
+    private function calculateCost(array $usage): void {
+        $pricingPerModel = [
+            // GPT-4o models
+            'gpt-4o' => ['input' => 0.000005, 'output' => 0.000015],
+            'gpt-4o-mini' => ['input' => 0.0000015, 'output' => 0.0000060],
+            'o4-mini' => ['input' => 0.0000015, 'output' => 0.0000060], // alias
+            'o4' => ['input' => 0.000005, 'output' => 0.000015], // alias
+            
+            // GPT-4 Turbo models
+            'gpt-4-turbo' => ['input' => 0.000005, 'output' => 0.000015],
+            'gpt-4-turbo-preview' => ['input' => 0.000005, 'output' => 0.000015],
+            
+            // GPT-4 models
+            'gpt-4.1-nano' => ['input' => 0.0000015, 'output' => 0.0000060], // This is a placeholder
+            'gpt-4' => ['input' => 0.00003, 'output' => 0.00006],
+            
+            // GPT-4 search models
+            'gpt-4o-mini-search-preview' => ['input' => 0.0000015, 'output' => 0.0000060], // pricing assumed
+            
+            // Default pricing for unknown models
+            'default' => ['input' => 0.000005, 'output' => 0.000015]
+        ];
+        
+        $pricing = $pricingPerModel[$this->model] ?? $pricingPerModel['default'];
+        
+        $inputTokens = $usage['prompt_tokens'] ?? 0;
+        $outputTokens = $usage['completion_tokens'] ?? 0;
+        
+        $inputCost = $inputTokens * $pricing['input'];
+        $outputCost = $outputTokens * $pricing['output'];
+        
+        $this->totalCost += ($inputCost + $outputCost);
     }
 }

@@ -1,0 +1,15 @@
+{
+    "name": "timanthonyalexander/presentation-generator",
+    "autoload": {
+        "psr-4": {
+            "Timanthonyalexander\\PresentationGenerator\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Tim Anthony Alexander",
+            "email": "info@timanthonyalexander.de"
+        }
+    ],
+    "require": {}
+}

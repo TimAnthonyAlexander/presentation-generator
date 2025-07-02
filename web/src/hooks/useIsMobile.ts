@@ -1,27 +1,26 @@
-import { useEffect, useState } from 'react';
-import { theme } from '../generals/theme';
+import { useState, useEffect } from 'react';
 
-function useIsMobile() {
-    const [isMobile, setIsMobile] = useState(window.innerWidth < theme.breakpoints.values.md);
+/**
+ * Hook to detect if the current viewport is mobile-sized
+ * @param breakpoint The width in pixels below which the view is considered mobile
+ */
+export default function useIsMobile(breakpoint = 768): boolean {
+  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < breakpoint);
 
-    useEffect(() => {
-        const handleResize = () => {
-            if (window.innerWidth < theme.breakpoints.values.md && !isMobile) {
-                setIsMobile(true);
-            }
-            if (window.innerWidth >= theme.breakpoints.values.md && isMobile) {
-                setIsMobile(false);
-            }
-        };
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < breakpoint);
+    };
 
-        handleResize();
+    window.addEventListener('resize', handleResize);
+    
+    // Initial check
+    handleResize();
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', handleResize);
+  }, [breakpoint]);
 
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, [isMobile]);
-
-    return isMobile;
+  return isMobile;
 }
-
-export default useIsMobile;
 
