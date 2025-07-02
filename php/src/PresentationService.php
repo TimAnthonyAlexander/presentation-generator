@@ -1,5 +1,7 @@
 <?php
 
+namespace Timanthonyalexander\PresentationGenerator;
+
 /**
  * Simplified Presentation Service
  * 

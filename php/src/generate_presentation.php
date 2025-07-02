@@ -2,6 +2,8 @@
 
 require_once __DIR__ . '/PresentationService.php';
 
+use Timanthonyalexander\PresentationGenerator\PresentationService;
+
 /**
  * Simplified Presentation Generator Script
  * 
